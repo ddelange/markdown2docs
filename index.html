@@ -22,6 +22,7 @@
       --accent: #60a5fa; --btn: #0891b2; --btn-hover: #0e7490;
       --code-bg: #374151; --quote: #9ca3af; --th: #111827;
       --ok-bg: #14532d; --ok: #86efac; --err-bg: #7f1d1d; --err: #fca5a5;
+      --hl-red: #ff7b72; --hl-purple: #d2a8ff; --hl-blue: #79c0ff; --hl-navy: #a5d6ff; --hl-orange: #ffa657; --hl-gray: #8b949e; --hl-green: #7ee787; --hl-text: #c9d1d9;
     }
   }
   * { box-sizing: border-box; }
@@ -83,11 +84,12 @@
   .preview ul, .preview ol { margin: .5em 0; padding-left: 2em; }
   .preview li { margin: .25em 0; }
   .preview code { padding: .2em .4em; border-radius: 3px; background: var(--code-bg); font: .9em ui-monospace, Menlo, monospace; }
-  .preview pre { margin: .5em 0; padding: 1em; overflow-x: auto; border-radius: 6px; background: var(--code-bg); }
+  .preview pre { width: fit-content; min-width: min(100%, 80ch); max-width: 100%; margin: .5em 0; padding: 1em; overflow-x: auto; border-radius: 6px; background: var(--code-bg); }
   .preview pre code { padding: 0; background: none; }
   .preview blockquote { margin: .5em 0; padding-left: 1em; border-left: 4px solid var(--border); color: var(--quote); }
-  .preview table { width: 100%; margin: .5em 0; border-collapse: collapse; }
-  .preview th, .preview td { padding: .5em; text-align: left; border: 1px solid var(--border); }
+  .preview table { margin: .5em 0; border-collapse: collapse; }
+  .preview th, .preview td { padding: .5em; border: 1px solid var(--border); }
+  .preview th:not([align]) { text-align: left; }
   .preview th { background: var(--th); }
   .preview hr { margin: 1em 0; border: 0; border-top: 1px solid var(--border); }
   .preview a { color: var(--accent); }
@@ -111,7 +113,7 @@ Paste this into a **Gmail draft**, a *Google Doc* or ~~a fax~~ <u>MS Word</u> wi
 
 ## Shipped and next
 
-- Faster search on the **orders** page, p<sub>95</sub> down from 1.2 s to 180 ms<sup>[1](#fn1)</sup>
+- Faster search on the orders page, **p<sub>95</sub> down** from 1.2 s to 180 ms<sup>[1](#fn1)</sup>
   1. Roll out to all regions
   2. Index `created_at` too
 - [x] Offsite budget approved
@@ -125,9 +127,14 @@ Paste this into a **Gmail draft**, a *Google Doc* or ~~a fax~~ <u>MS Word</u> wi
 `p95` relies on the built in [`sorted`](https://docs.python.org/3/library/functions.html#sorted):
 
 ```python
-def p95(latencies):
-    ranked = sorted(latencies)
-    return ranked[int(len(ranked) * 0.95)]
+@dataclass(frozen=True)
+class Window:
+    latencies: list[float]  # response times in ms
+
+    def p95(self) -> float:
+        """Nearest rank 95th percentile."""
+        ranked = sorted(self.latencies)
+        return ranked[int(len(ranked) * 0.95)]
 ```
 
 ## Numbers
@@ -174,6 +181,7 @@ def p95(latencies):
 <script defer src="vendor/marked.umd.js"></script>
 <script defer src="vendor/purify.min.js"></script>
 <script defer src="vendor/docx.iife.min.js"></script>
+<script defer src="vendor/highlight.min.js"></script>
 <script type="module">
 const { Document, Packer, Paragraph, TextRun, ExternalHyperlink, InternalHyperlink, Bookmark, Table, TableRow, TableCell, HeadingLevel, BorderStyle, ShadingType, WidthType } = docx;
 
@@ -186,6 +194,39 @@ const shade = (fill) => ({ type: ShadingType.CLEAR, fill });
 const line = { style: BorderStyle.SINGLE, size: 1, color: "000000" };
 // TextRun option per inline html tag, size in half points
 const tags = { u: ["underline", {}], small: ["size", 16], sup: ["superScript", true], sub: ["subScript", true], mark: ["highlight", "yellow"] };
+
+// highlight.js scopes in GitHub light colors, the preview swaps in GitHub dark ones through --hl-<name>
+const palette = {
+  red: ["d73a49", "doctag keyword template-tag template-variable type deletion"],
+  purple: ["6f42c1", "title"],
+  blue: ["005cc5", "attr attribute literal meta number operator variable selector-attr selector-class selector-id section"],
+  navy: ["032f62", "regexp string"],
+  orange: ["e36209", "built_in symbol"],
+  gray: ["6a737d", "comment code formula"],
+  green: ["22863a", "name quote selector-tag selector-pseudo addition"],
+  text: ["24292e", "subst emphasis strong"],
+};
+const hlCss = Object.entries(palette).map(([name, [hex, scopes]]) => `${scopes.replace(/\S+/g, ".hljs-$&").replaceAll(" ", ", ")} { color: var(--hl-${name}, #${hex}); }`).join("\n");
+document.head.append(Object.assign(document.createElement("style"), { textContent: hlCss }));
+const scopeColor = (scope) => Object.values(palette).find(([, scopes]) => scopes.split(" ").includes(scope))?.[0];
+
+// Only fences naming a known language get colors, like on GitHub
+function highlight(text, lang = "") {
+  const language = lang.match(/^\S*/)[0];
+  return hljs.getLanguage(language) ? hljs.highlight(text, { language }).value : false;
+}
+marked.use({ renderer: { code({ text, lang }) {
+  const html = highlight(text, lang);
+  return html !== false && `<pre><code class="hljs">${html}</code></pre>\n`;
+} } });
+
+// highlight.js HTML as [text, color] pairs, each in the color of its innermost scope
+function colored(html) {
+  const pairs = [];
+  const walk = (node, color) => node.childNodes.forEach((n) => n.nodeType === Node.TEXT_NODE ? pairs.push([n.data, color]) : walk(n, scopeColor(n.classList[0]?.slice(5)) ?? color));
+  walk(new DOMParser().parseFromString(html, "text/html").body, "333333");
+  return pairs;
+}
 
 function inline(tokens = [], style = {}) {
   return tokens.flatMap((t) => {
@@ -227,7 +268,7 @@ function list(t, indent) {
 
 function cell(c, header) {
   return new TableCell({
-    children: [new Paragraph({ children: inline(c.tokens, header ? { bold: true } : {}) })],
+    children: [new Paragraph({ children: inline(c.tokens, header ? { bold: true } : {}), alignment: c.align })],
     shading: header ? shade("F0F0F0") : undefined,
     margins: { top: 100, bottom: 100, left: 100, right: 100 },
   });
@@ -240,10 +281,20 @@ function blocks(tokens, indent = 0) {
       case "paragraph": case "text": return [new Paragraph({ children: inline(t.tokens ?? [t]), spacing: { after: 120 }, indent: { left: indent } })];
       case "list": return list(t, indent);
       case "blockquote": return blocks(t.tokens, indent + 720);
-      case "code": return t.text.split("\n").map((l) => new Paragraph({
-        children: [new TextRun({ text: l || " ", font: "Courier New", color: "333333" })],
-        spacing: { before: 40, after: 40 }, indent: { left: indent + 360 }, shading: shade("F5F5F5"),
-      }));
+      case "code": {
+        const html = highlight(t.text, t.lang);
+        const lines = [[]];
+        for (const [text, color] of html ? colored(html) : [[t.text, "333333"]]) {
+          text.split("\n").forEach((s, i) => {
+            if (i) lines.push([]);
+            if (s) lines.at(-1).push(new TextRun({ text: s, font: "Courier New", color }));
+          });
+        }
+        return lines.map((children) => new Paragraph({
+          children: children.length ? children : [new TextRun({ text: " ", font: "Courier New" })],
+          spacing: { before: 40, after: 40 }, indent: { left: indent + 360 }, shading: shade("F5F5F5"),
+        }));
+      }
       case "table": return [
         new Table({
           rows: [new TableRow({ tableHeader: true, children: t.header.map((c) => cell(c, true)) }), ...t.rows.map((r) => new TableRow({ children: r.map((c) => cell(c)) }))],
@@ -270,14 +321,16 @@ const htmlDoc = (text, title = "") => `<!doctype html>
   @page { margin: 2cm; }
   body { font-family: Arial, sans-serif; line-height: 1.6; color: #000; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   code { background: #f3f4f6; padding: .2em .4em; border-radius: 3px; font-family: monospace; }
-  pre { background: #f3f4f6; padding: 1em; border-radius: 6px; overflow-x: auto; }
+  pre { width: fit-content; min-width: min(100%, 80ch); max-width: 100%; background: #f3f4f6; padding: 1em; border-radius: 6px; overflow-x: auto; }
   pre code { background: none; padding: 0; }
   blockquote { border-left: 4px solid #e5e7eb; padding-left: 1em; margin: .5em 0; color: #6b7280; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #e5e7eb; padding: .5em; text-align: left; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid #e5e7eb; padding: .5em; }
+  th:not([align]) { text-align: left; }
   th { background: #f9fafb; }
   hr { border: 0; border-top: 1px solid #e5e7eb; }
   a { color: #3b82f6; }
+${hlCss}
   @media print { pre { white-space: pre-wrap; } pre, tr, img, blockquote { break-inside: avoid; } h1, h2, h3, h4, h5, h6 { break-after: avoid; } }
 </style>
 </head>
