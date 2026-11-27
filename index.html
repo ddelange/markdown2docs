@@ -13,14 +13,14 @@
     color-scheme: light dark;
     --bg: #f9fafb; --card: #fff; --field: #f9fafb; --border: #e5e7eb; --text: #111827; --muted: #4b5563; --faint: #9ca3af;
     --accent: #3b82f6; --btn: #06b6d4; --btn-hover: #0891b2;
-    --code-bg: #f3f4f6; --code: inherit; --quote: #6b7280; --th: #f9fafb;
+    --code-bg: #f3f4f6; --quote: #6b7280; --th: #f9fafb;
     --ok-bg: #dcfce7; --ok: #15803d; --err-bg: #fee2e2; --err: #b91c1c;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #111827; --card: #1f2937; --field: #374151; --border: #4b5563; --text: #f3f4f6; --muted: #d1d5db;
       --accent: #60a5fa; --btn: #0891b2; --btn-hover: #0e7490;
-      --code-bg: #374151; --code: #60a5fa; --quote: #9ca3af; --th: #111827;
+      --code-bg: #374151; --quote: #9ca3af; --th: #111827;
       --ok-bg: #14532d; --ok: #86efac; --err-bg: #7f1d1d; --err: #fca5a5;
     }
   }
@@ -82,9 +82,9 @@
   .preview p { margin: .5em 0; line-height: 1.6; }
   .preview ul, .preview ol { margin: .5em 0; padding-left: 2em; }
   .preview li { margin: .25em 0; }
-  .preview code { padding: .2em .4em; border-radius: 3px; background: var(--code-bg); color: var(--code); font: .9em ui-monospace, Menlo, monospace; }
+  .preview code { padding: .2em .4em; border-radius: 3px; background: var(--code-bg); font: .9em ui-monospace, Menlo, monospace; }
   .preview pre { margin: .5em 0; padding: 1em; overflow-x: auto; border-radius: 6px; background: var(--code-bg); }
-  .preview pre code { padding: 0; background: none; color: inherit; }
+  .preview pre code { padding: 0; background: none; }
   .preview blockquote { margin: .5em 0; padding-left: 1em; border-left: 4px solid var(--border); color: var(--quote); }
   .preview table { width: 100%; margin: .5em 0; border-collapse: collapse; }
   .preview th, .preview td { padding: .5em; text-align: left; border: 1px solid var(--border); }
@@ -105,44 +105,24 @@
     <h2>Markdown Input<small id="count"></small></h2>
     <div class="box">
       <textarea id="md" spellcheck="false" aria-label="Markdown input" placeholder="# Title&#10;&#10;A paragraph with **bold** and *italic* text.">
-# Weekly update
+# Example [markdown2docs](https://delange.dev/markdown2docs/)
 
-Hi team, here is where we stand. Paste this into a **Gmail draft**, a *Google Doc* or ~~a fax~~ Word with the copy button.
+Paste this into a **Gmail draft**, a *Google Doc* or ~~a fax~~ <u>MS Word</u> with the <mark>copy button</mark>.
 
-## Shipped
+## Shipped and next
 
-- Faster search on the **orders** page
-  - Indexes on `customer_id` and `created_at`
-  - p95 latency down from 1.2 s to 180 ms
-- New onboarding emails
-- Dark mode for the dashboard
-
-## Next steps
-
-1. Roll out search to all regions
-2. Review the pricing page
-   1. Headline copy
-   2. FAQ section
-3. Plan the Q1 offsite
-
-## Offsite checklist
-
-- [x] Budget approved
-- [ ] Venue booked
-- [ ] Agenda shared
+- Faster search on the **orders** page, p<sub>95</sub> down from 1.2 s to 180 ms<sup>[1](#fn1)</sup>
+  1. Roll out to all regions
+  2. Index `created_at` too
+- [x] Offsite budget approved
+- [ ] Offsite venue booked
 
 > **Heads up:** the database migration runs Sunday night.
-> > Expect up to 10 minutes of read only mode.
+> > *Expect up to 10 minutes of read only mode.*
 
-## Numbers
+### How we measure p95
 
-| Metric | Last week | This week |
-|--------|----------:|----------:|
-| Signups | 412 | 468 |
-| Churn | 2.1% | 1.8% |
-| NPS | 41 | 44 |
-
-## How we measure p95
+`p95` relies on the built in [`sorted`](https://docs.python.org/3/library/functions.html#sorted):
 
 ```python
 def p95(latencies):
@@ -150,11 +130,19 @@ def p95(latencies):
     return ranked[int(len(ranked) * 0.95)]
 ```
 
-New to markdown? See the [cheat sheet](https://www.markdownguide.org/cheat-sheet/).
+## Numbers
+
+| Metric | Last week | This week |
+|--------|----------:|----------:|
+| Signups | 412 | 468 |
+| Churn | 2.1% | **1.8%** |
+| NPS | 41 | 44 |
+
+<small id="fn1"><sup>1</sup> Over all requests of the last 7 days.</small>
 
 ---
 
-Thanks all, see you Monday!
+<small>*New to markdown? See the [cheat sheet](https://www.markdownguide.org/cheat-sheet/) or https://commonmark.org/help/*</small>
 </textarea>
     </div>
     <div class="drop" id="drop">
@@ -187,7 +175,7 @@ Thanks all, see you Monday!
 <script defer src="vendor/purify.min.js"></script>
 <script defer src="vendor/docx.iife.min.js"></script>
 <script type="module">
-const { Document, Packer, Paragraph, TextRun, ExternalHyperlink, Table, TableRow, TableCell, HeadingLevel, BorderStyle, ShadingType, WidthType } = docx;
+const { Document, Packer, Paragraph, TextRun, ExternalHyperlink, InternalHyperlink, Bookmark, Table, TableRow, TableCell, HeadingLevel, BorderStyle, ShadingType, WidthType } = docx;
 
 const $ = (id) => document.getElementById(id);
 const md = $("md"), preview = $("preview"), name = $("name"), status = $("status");
@@ -196,6 +184,8 @@ const md = $("md"), preview = $("preview"), name = $("name"), status = $("status
 const decode = (s = "") => s.includes("&") ? new DOMParser().parseFromString(s, "text/html").body.textContent : s;
 const shade = (fill) => ({ type: ShadingType.CLEAR, fill });
 const line = { style: BorderStyle.SINGLE, size: 1, color: "000000" };
+// TextRun option per inline html tag, size in half points
+const tags = { u: ["underline", {}], small: ["size", 16], sup: ["superScript", true], sub: ["subScript", true], mark: ["highlight", "yellow"] };
 
 function inline(tokens = [], style = {}) {
   return tokens.flatMap((t) => {
@@ -203,10 +193,21 @@ function inline(tokens = [], style = {}) {
       case "strong": return inline(t.tokens, { ...style, bold: true });
       case "em": return inline(t.tokens, { ...style, italics: true });
       case "del": return inline(t.tokens, { ...style, strike: true });
-      case "codespan": return [new TextRun({ text: decode(t.text), font: "Courier New", color: "666666", ...style })];
-      case "link": return [new ExternalHyperlink({ link: t.href, children: inline(t.tokens, { ...style, style: "Hyperlink" }) })];
+      // Gray would override the Hyperlink style's blue, so linked code stays blue like in the preview
+      case "codespan": return [new TextRun({ text: decode(t.text), font: "Courier New", ...(style.style !== "Hyperlink" && { color: "666666" }), ...style })];
+      case "link": {
+        const children = inline(t.tokens, { ...style, style: "Hyperlink" });
+        return [t.href.startsWith("#") ? new InternalHyperlink({ anchor: t.href.slice(1), children }) : new ExternalHyperlink({ link: t.href, children })];
+      }
       case "br": return [new TextRun({ break: 1 })];
-      case "html": return /^<br\s*\/?>$/i.test(t.text.trim()) ? [new TextRun({ break: 1 })] : [];
+      // marked yields inline tags as separate open and close tokens, so they toggle the style of the siblings in between
+      case "html": {
+        const [, close, tag] = /^<(\/?)(\w+)/.exec(t.text.trim().toLowerCase()) ?? [];
+        if (tag in tags) style = { ...style, [tags[tag][0]]: close ? undefined : tags[tag][1] };
+        // An id becomes a Word bookmark, the target of #id links
+        const id = /\bid="([^"]+)"/i.exec(t.text)?.[1];
+        return tag === "br" ? [new TextRun({ break: 1 })] : id ? [new Bookmark({ id, children: [] })] : [];
+      }
       case "checkbox": return [new TextRun({ text: t.checked ? "☑ " : "☐ ", ...style })];
       default: return t.tokens ? inline(t.tokens, style) : [new TextRun({ text: decode(t.text), ...style })];
     }
@@ -354,7 +355,8 @@ $("pdf").addEventListener("click", () => {
 $("copy").addEventListener("click", async () => {
   try {
     await navigator.clipboard.write([new ClipboardItem({
-      "text/html": new Blob([htmlDoc(md.value)], { type: "text/html" }),
+      // Pasting resolves #anchors against this page's URL, so in-page links lose their link instead
+      "text/html": new Blob([htmlDoc(md.value).replace(/<a href="#[^"]*"[^>]*>([\s\S]*?)<\/a>/g, "$1")], { type: "text/html" }),
       "text/plain": new Blob([md.value], { type: "text/plain" }),
     })]);
     flash("Copied! Paste into Word, Google Docs or Gmail.");
